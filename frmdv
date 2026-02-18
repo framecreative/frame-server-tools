@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use App\Command\InitFirewallCommand;
+use App\Command\ReloadFail2BanCommand;
+use App\Command\ReloadJailCommand;
+use App\Command\StatusCommand;
+use App\Command\UpdateCloudflareCommand;
+use Symfony\Component\Console\Application;
+
+$application = new Application('Frame Server Tools', '1.0.0');
+$application->addCommand(new InitFirewallCommand());
+$application->addCommand(new ReloadFail2BanCommand());
+$application->addCommand(new ReloadJailCommand());
+$application->addCommand(new StatusCommand());
+$application->addCommand(new UpdateCloudflareCommand());
+$application->run();
