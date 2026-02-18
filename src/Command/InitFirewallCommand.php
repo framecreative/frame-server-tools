@@ -84,7 +84,7 @@ class InitFirewallCommand extends Command
         // Section 3 & 4: Per-site filters, jails, nginx includes
         $io->section('Creating per-site fail2ban filters and jails');
 
-        $sites = $discovery->discover();
+        $sites = $discovery->discoverProtected();
 
         if (empty($sites)) {
             $io->warning('No sites with fail2ban.conf found');

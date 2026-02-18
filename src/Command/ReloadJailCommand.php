@@ -47,7 +47,7 @@ class ReloadJailCommand extends Command
         if ($regenerate) {
             $io->text('Regenerating all jail and filter configs...');
             $discovery = new SiteDiscovery($config);
-            $sites = $discovery->discover();
+            $sites = $discovery->discoverProtected();
 
             foreach ($sites as $site) {
                 $fail2ban->createFilter($site);
@@ -72,7 +72,7 @@ class ReloadJailCommand extends Command
         if ($regenerate) {
             $io->text("Regenerating config for jail: {$jail}");
             $discovery = new SiteDiscovery($config);
-            $sites = $discovery->discover();
+            $sites = $discovery->discoverProtected();
 
             // Find the matching site by jail name
             $found = false;

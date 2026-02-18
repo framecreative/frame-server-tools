@@ -13,11 +13,11 @@ class SiteDiscovery
     ) {}
 
     /**
-     * Discovers all sites under /home that have a fail2ban.conf.
+     * Discovers all sites under /home, regardless of fail2ban.conf presence.
      *
      * @return SiteInfo[]
      */
-    public function discover(): array
+    public function discoverAll(): array
     {
         $sites = [];
 
@@ -36,8 +36,6 @@ class SiteDiscovery
                 $fail2banConf = $confInCurrent;
             } elseif (file_exists($confInRoot)) {
                 $fail2banConf = $confInRoot;
-            } else {
-                continue;
             }
 
             $shortName = $this->config->getShortName($domain);
@@ -55,5 +53,15 @@ class SiteDiscovery
         }
 
         return $sites;
+    }
+
+    /**
+     * Discovers only sites under /home that have a fail2ban.conf.
+     *
+     * @return SiteInfo[]
+     */
+    public function discoverProtected(): array
+    {
+        return array_values(array_filter($this->discoverAll(), fn(SiteInfo $site) => $site->fail2banConf !== null));
     }
 }
