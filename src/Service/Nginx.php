@@ -96,6 +96,89 @@ class Nginx
     }
 
     /**
+     * Bans an IP by appending a deny line to the deny file.
+     * Returns false if the IP is already banned.
+     */
+    public function banIp(string $ip, ?string $reason = null): bool
+    {
+        if ($this->isIpBanned($ip)) {
+            return false;
+        }
+
+        $line = "deny $ip;";
+        $comments = [];
+        if ($reason !== null) {
+            $comments[] = $reason;
+        }
+        $comments[] = 'manual-ban ' . date('Y-m-d H:i:s');
+        $line .= ' # ' . implode(' | ', $comments);
+
+        file_put_contents($this->config->nginxDenyFile, $line . "\n", FILE_APPEND);
+        return true;
+    }
+
+    /**
+     * Unbans an IP by removing its deny line from the deny file.
+     * Returns false if the IP was not found.
+     */
+    public function unbanIp(string $ip): bool
+    {
+        if (!file_exists($this->config->nginxDenyFile)) {
+            return false;
+        }
+
+        $content = file_get_contents($this->config->nginxDenyFile);
+        $lines = explode("\n", $content);
+        $filtered = [];
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (preg_match('/^deny\s+' . preg_quote($ip, '/') . '\s*;/', $line)) {
+                $found = true;
+                continue;
+            }
+            $filtered[] = $line;
+        }
+
+        if (!$found) {
+            return false;
+        }
+
+        file_put_contents($this->config->nginxDenyFile, implode("\n", $filtered));
+        return true;
+    }
+
+    /**
+     * Checks if an IP is currently banned in the deny file.
+     */
+    public function isIpBanned(string $ip): bool
+    {
+        if (!file_exists($this->config->nginxDenyFile)) {
+            return false;
+        }
+
+        $content = file_get_contents($this->config->nginxDenyFile);
+        return (bool) preg_match('/^deny\s+' . preg_quote($ip, '/') . '\s*;/m', $content);
+    }
+
+    /**
+     * Returns the full deny line for a banned IP, or null if not found.
+     */
+    public function getBanLine(string $ip): ?string
+    {
+        if (!file_exists($this->config->nginxDenyFile)) {
+            return null;
+        }
+
+        $content = file_get_contents($this->config->nginxDenyFile);
+        if (preg_match('/^(deny\s+' . preg_quote($ip, '/') . '\s*;.*)$/m', $content, $matches)) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /**
      * Tests the nginx configuration. Returns true if valid.
      */
     public function test(): bool
