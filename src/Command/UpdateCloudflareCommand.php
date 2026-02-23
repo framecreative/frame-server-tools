@@ -14,6 +14,17 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:update-cloudflare',
     description: 'Updates Cloudflare real IP ranges for nginx (suitable for cron)',
+    help: <<<'HELP'
+    Fetches the current list of Cloudflare IP ranges and writes them to the nginx
+    realip config so that CF-Connecting-IP is used as the real client address.
+
+    Designed to be run from a cron job. Use --reload to also test and reload nginx
+    after writing the config.
+    HELP,
+    usages: [
+        'firewall:update-cloudflare',
+        'firewall:update-cloudflare --reload',
+    ],
 )]
 class UpdateCloudflareCommand extends Command
 {

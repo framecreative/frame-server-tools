@@ -16,6 +16,21 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:refresh-jail',
     description: 'Refreshes fail2ban jail configs and reloads',
+    help: <<<'HELP'
+    Regenerates fail2ban filter and jail config files from each site's fail2ban.conf,
+    then reloads the jail(s). When called without arguments, all protected sites are
+    regenerated and fail2ban is fully reloaded. When a site is specified, only that
+    jail is regenerated and reloaded.
+
+    The site can be identified by its full domain, its shortName, or its jail name
+    (forge-{shortName}). Use --no-regenerate to reload without rewriting config files.
+    HELP,
+    usages: [
+        'firewall:refresh-jail',
+        'firewall:refresh-jail example.com',
+        'firewall:refresh-jail myshortname',
+        'firewall:refresh-jail forge-myshortname --no-regenerate',
+    ],
 )]
 class RefreshJailConfigCommand extends Command
 {

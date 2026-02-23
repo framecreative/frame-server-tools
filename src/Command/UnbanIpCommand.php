@@ -14,6 +14,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:unban',
     description: 'Remove an IP ban from nginx deny file and fail2ban',
+    help: <<<'HELP'
+    Removes an IP ban. The IP is first removed from all fail2ban jails (to prevent
+    re-banning on the next cycle), then removed from the nginx banned-ips deny file.
+    Nginx is tested and reloaded after the change.
+    HELP,
+    usages: [
+        'firewall:unban 203.0.113.50',
+    ],
 )]
 class UnbanIpCommand extends Command
 {

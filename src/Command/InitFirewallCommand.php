@@ -16,6 +16,24 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:init',
     description: 'Sets up Fail2ban jails, filters, actions and nginx ban layer',
+    help: <<<'HELP'
+    Performs a full firewall setup for all protected sites on the server:
+
+      1. Fetches Cloudflare IP ranges and writes the nginx realip config
+      2. Ensures the shared banned-ips.conf deny file exists
+      3. Creates the fail2ban nginx-deny-file action
+      4. Generates per-site fail2ban filters and jails for each site with a fail2ban.conf
+      5. Injects the banned-ips include into each Forge site.conf
+      6. Writes jail.local with whitelisted IPs and default action
+      7. Tests and reloads nginx and fail2ban
+
+    Use --dry-run to preview all generated configs without writing anything.
+    HELP,
+    usages: [
+        'firewall:init',
+        'firewall:init --dry-run',
+        'firewall:init --skip-cloudflare --skip-reload',
+    ],
 )]
 class InitFirewallCommand extends Command
 {

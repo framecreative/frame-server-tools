@@ -14,6 +14,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:ip-lookup',
     description: 'Look up ban status of an IP in nginx deny file and fail2ban jails',
+    help: <<<'HELP'
+    Checks whether an IP address is currently banned. Searches both the nginx
+    banned-ips deny file and all active fail2ban jails, reporting where the IP
+    was found.
+    HELP,
+    usages: [
+        'firewall:ip-lookup 203.0.113.50',
+    ],
 )]
 class IpLookupCommand extends Command
 {

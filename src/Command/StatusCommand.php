@@ -15,6 +15,19 @@ use Symfony\Component\Finder\Finder;
 #[AsCommand(
     name: 'firewall:status',
     description: 'Shows firewall component status and active bans',
+    help: <<<'HELP'
+    Without arguments, displays a dashboard of all firewall components: Cloudflare
+    realip config, banned IPs, fail2ban service status, and per-jail ban counts.
+
+    When a site is specified (by domain, shortName, or jail name), shows detailed
+    status for that site including its nginx config, access log, fail2ban jail,
+    and all currently banned IPs.
+    HELP,
+    usages: [
+        'firewall:status',
+        'firewall:status example.com',
+        'firewall:status myshortname',
+    ],
 )]
 class StatusCommand extends Command
 {
@@ -23,7 +36,7 @@ class StatusCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addArgument('site', InputArgument::OPTIONAL, 'Show detailed status for a specific site (domain name)');
+            ->addArgument('site', InputArgument::OPTIONAL, 'Show detailed status for a specific site (domain, shortName, or jail name)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -115,13 +128,7 @@ class StatusCommand extends Command
         $discovery = new SiteDiscovery($config);
         $sites = $discovery->discoverAll();
 
-        $site = null;
-        foreach ($sites as $s) {
-            if ($s->domain === $siteName) {
-                $site = $s;
-                break;
-            }
-        }
+        $site = $discovery->findSite($siteName, $sites);
 
         if ($site === null) {
             $this->io->error("Site not found: $siteName");

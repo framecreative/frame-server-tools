@@ -13,6 +13,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'sites:list',
     description: 'Lists all discovered sites and their fail2ban protection status',
+    help: <<<'HELP'
+    Scans the /home directory for all Forge-managed sites and displays them in a
+    table showing domain, short name, whether a fail2ban.conf was found, and the
+    site path.
+    HELP,
+    usages: [
+        'sites:list',
+    ],
 )]
 class SitesListCommand extends Command
 {

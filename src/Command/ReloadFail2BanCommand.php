@@ -13,6 +13,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:reload',
     description: 'Reloads the fail2ban service',
+    help: <<<'HELP'
+    Performs a full fail2ban service reload. This re-reads all jail, filter, and
+    action configs. Use firewall:refresh-jail to reload a single jail instead.
+    HELP,
+    usages: [
+        'firewall:reload',
+    ],
 )]
 class ReloadFail2BanCommand extends Command
 {

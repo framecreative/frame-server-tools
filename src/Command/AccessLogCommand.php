@@ -15,6 +15,18 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:access-log',
     description: 'Displays recent access log entries for a site',
+    help: <<<'HELP'
+    Tails the nginx access log for a given site. The site can be identified by its
+    full domain name, its shortName, or its jail name (forge-{shortName}).
+
+    All discovered sites are searched, not just those with fail2ban protection.
+    HELP,
+    usages: [
+        'firewall:access-log example.com',
+        'firewall:access-log example.com --lines=200',
+        'firewall:access-log myshortname -l 100',
+        'firewall:access-log forge-myshortname',
+    ],
 )]
 class AccessLogCommand extends Command
 {

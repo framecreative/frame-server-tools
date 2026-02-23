@@ -14,6 +14,16 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(
     name: 'firewall:ban',
     description: 'Manually ban an IP address via nginx deny file',
+    help: <<<'HELP'
+    Adds a deny rule for the given IP to the shared nginx banned-ips file, then
+    tests and reloads nginx. The ban applies to all sites. If the IP is already
+    banned, the existing entry is shown and no changes are made. If the nginx
+    config test fails after writing, the entry is automatically rolled back.
+    HELP,
+    usages: [
+        'firewall:ban 203.0.113.50',
+        'firewall:ban 203.0.113.50 "brute force login"',
+    ],
 )]
 class BanIpCommand extends Command
 {
