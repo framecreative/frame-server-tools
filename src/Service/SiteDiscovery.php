@@ -69,6 +69,22 @@ class SiteDiscovery
     }
 
     /**
+     * Finds a site by domain, shortName, or jail name (forge-{shortName}).
+     *
+     * @param SiteInfo[] $sites
+     */
+    public function findSite(string $identifier, array $sites): ?SiteInfo
+    {
+        foreach ($sites as $s) {
+            if ($s->domain === $identifier || $s->shortName === $identifier || 'forge-' . $s->shortName === $identifier) {
+                return $s;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Finds the Forge site.conf for a domain by scanning forge-conf site ID directories.
      */
     private function findForgeSiteConf(string $domain): ?string

@@ -44,13 +44,7 @@ class RefreshJailConfigCommand extends Command
         $discovery = new SiteDiscovery($config);
         $sites = $discovery->discoverProtected();
 
-        $matched = null;
-        foreach ($sites as $s) {
-            if ($s->domain === $site || $s->shortName === $site || 'forge-' . $s->shortName === $site) {
-                $matched = $s;
-                break;
-            }
-        }
+        $matched = $discovery->findSite($site, $sites);
 
         if ($matched === null) {
             $this->io->error("No protected site found matching: {$site}");
