@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Config\FirewallConfig;
+use App\Service\Fail2Ban;
 use App\Service\Nginx;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -45,6 +46,7 @@ class UnbanIpCommand extends Command
 
         $config = new FirewallConfig();
         $nginx = new Nginx($config);
+        $fail2ban = new Fail2Ban($config);
 
         if (!$nginx->isIpBanned($ip)) {
             $this->io->warning("IP $ip is not in the nginx deny file.");
@@ -52,8 +54,7 @@ class UnbanIpCommand extends Command
         }
 
         // Unban from fail2ban first to prevent re-banning on next cycle
-        exec('fail2ban-client unban ' . escapeshellarg($ip) . ' 2>&1', $f2bOutput, $f2bExit);
-        if ($f2bExit === 0) {
+        if ($fail2ban->unbanIp($ip)) {
             $this->io->text("Removed $ip from fail2ban.");
         }
 

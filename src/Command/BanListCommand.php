@@ -3,6 +3,8 @@
 namespace App\Command;
 
 use App\Config\FirewallConfig;
+use App\Service\Fail2Ban;
+use App\Service\Nginx;
 use App\Service\SiteDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -41,21 +43,15 @@ class BanListCommand extends Command
     {
         $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
+        $fail2ban = new Fail2Ban($config);
+        $nginx = new Nginx($config);
         $jailFilter = $input->getOption('jail');
 
         // Parse nginx deny file
-        $nginxBans = [];
-        if (file_exists($config->nginxDenyFile)) {
-            $lines = file($config->nginxDenyFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            foreach ($lines as $line) {
-                if (preg_match('/^deny\s+([^;]+);\s*(?:#\s*(.*))?$/', $line, $m)) {
-                    $nginxBans[trim($m[1])] = trim($m[2] ?? '');
-                }
-            }
-        }
+        $nginxBans = $nginx->getAllBans();
 
         // Get fail2ban jails
-        $jails = $this->getFail2banJails();
+        $jails = $fail2ban->getJails();
 
         // Resolve --jail filter
         if ($jailFilter !== null) {
@@ -79,7 +75,7 @@ class BanListCommand extends Command
         // Get banned IPs per jail
         $jailBans = [];
         foreach ($jails as $jail) {
-            foreach ($this->getJailBannedIps($jail) as $ip) {
+            foreach ($fail2ban->getJailBannedIps($jail) as $ip) {
                 $jailBans[$ip][] = $jail;
             }
         }
@@ -117,37 +113,5 @@ class BanListCommand extends Command
         ));
 
         return Command::SUCCESS;
-    }
-
-    private function getFail2banJails(): array
-    {
-        exec('fail2ban-client status 2>&1', $output, $exitCode);
-        if ($exitCode !== 0) {
-            return [];
-        }
-
-        foreach ($output as $line) {
-            if (preg_match('/Jail list:\s*(.+)/', $line, $matches)) {
-                return array_map('trim', explode(',', $matches[1]));
-            }
-        }
-
-        return [];
-    }
-
-    private function getJailBannedIps(string $jail): array
-    {
-        exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $output, $exitCode);
-        if ($exitCode !== 0) {
-            return [];
-        }
-
-        foreach ($output as $line) {
-            if (preg_match('/Banned IP list:\s*(.+)/', $line, $matches)) {
-                return array_filter(array_map('trim', explode(' ', $matches[1])));
-            }
-        }
-
-        return [];
     }
 }

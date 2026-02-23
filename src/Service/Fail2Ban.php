@@ -162,6 +162,119 @@ CONF;
     }
 
     /**
+     * Returns true if fail2ban is running and accessible.
+     */
+    public function isRunning(): bool
+    {
+        exec('fail2ban-client status 2>&1', $output, $exitCode);
+        return $exitCode === 0;
+    }
+
+    /**
+     * Returns the list of active jail names.
+     */
+    public function getJails(): array
+    {
+        exec('fail2ban-client status 2>&1', $output, $exitCode);
+        if ($exitCode !== 0) {
+            return [];
+        }
+
+        foreach ($output as $line) {
+            if (preg_match('/Jail list:\s*(.+)/', $line, $matches)) {
+                return array_map('trim', explode(',', $matches[1]));
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Returns true if a specific jail is active.
+     */
+    public function isJailActive(string $jail): bool
+    {
+        exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $output, $exitCode);
+        return $exitCode === 0;
+    }
+
+    /**
+     * Returns the list of banned IPs in a jail.
+     */
+    public function getJailBannedIps(string $jail): array
+    {
+        exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $output, $exitCode);
+        if ($exitCode !== 0) {
+            return [];
+        }
+
+        foreach ($output as $line) {
+            if (preg_match('/Banned IP list:\s*(.+)/', $line, $matches)) {
+                return array_filter(array_map('trim', explode(' ', $matches[1])));
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Returns the number of currently banned IPs in a jail.
+     */
+    public function getJailBannedCount(string $jail): int
+    {
+        exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $output, $exitCode);
+        if ($exitCode !== 0) {
+            return 0;
+        }
+
+        foreach ($output as $line) {
+            if (preg_match('/Currently banned:\s*(\d+)/', $line, $matches)) {
+                return (int) $matches[1];
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Returns true if an IP is banned in a specific jail.
+     */
+    public function isIpInJail(string $ip, string $jail): bool
+    {
+        return in_array($ip, $this->getJailBannedIps($jail), true);
+    }
+
+    /**
+     * Returns the ignored (whitelisted) IPs for a jail as a comma-separated string.
+     */
+    public function getJailIgnoredIps(string $jail): string
+    {
+        exec('fail2ban-client get ' . escapeshellarg($jail) . ' ignoreip 2>&1', $output, $exitCode);
+        if ($exitCode !== 0) {
+            return '(error querying jail)';
+        }
+
+        $ips = [];
+        foreach ($output as $line) {
+            $line = trim($line);
+            if (preg_match('/^[|\\\\]-\s+(.+)/', $line, $matches)) {
+                $ips[] = $matches[1];
+            }
+        }
+
+        return implode(', ', $ips);
+    }
+
+    /**
+     * Unbans an IP from all fail2ban jails. Returns true on success.
+     */
+    public function unbanIp(string $ip): bool
+    {
+        exec('fail2ban-client unban ' . escapeshellarg($ip) . ' 2>&1', $output, $exitCode);
+        return $exitCode === 0;
+    }
+
+    /**
      * Bans an IP in a specific jail. Returns true on success.
      */
     public function banIp(string $ip, string $jailName): bool

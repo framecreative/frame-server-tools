@@ -3,6 +3,9 @@
 namespace App\Command;
 
 use App\Config\FirewallConfig;
+use App\Config\SiteInfo;
+use App\Service\Fail2Ban;
+use App\Service\Nginx;
 use App\Service\SiteDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -34,114 +37,139 @@ class HealthCommand extends Command
     {
         $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
+        $fail2ban = new Fail2Ban($config);
+        $nginx = new Nginx($config);
 
         $this->io->title('Firewall Health Check');
 
-        // nginx
+        $this->checkNginx($nginx);
+        $this->checkFail2ban($fail2ban);
+        $this->checkCloudflareConfig($config);
+        $this->checkBannedIpsFile($config);
+        $this->checkSites($config, $fail2ban);
+
+        return $this->showSummary();
+    }
+
+    private function checkNginx(Nginx $nginx): void
+    {
         $this->io->section('nginx');
-        exec('nginx -t 2>&1', $nginxOutput, $nginxExit);
         $this->check(
-            $nginxExit === 0,
+            $nginx->test(),
             'nginx configuration test passed',
             'nginx configuration test failed',
         );
+    }
 
-        // fail2ban
+    private function checkFail2ban(Fail2Ban $fail2ban): void
+    {
         $this->io->section('fail2ban');
-        exec('fail2ban-client status 2>&1', $f2bOutput, $f2bExit);
         $this->check(
-            $f2bExit === 0,
+            $fail2ban->isRunning(),
             'fail2ban is running',
             'fail2ban is not running or not accessible',
         );
+    }
 
-        // Cloudflare realip config
+    private function checkCloudflareConfig(FirewallConfig $config): void
+    {
         $this->io->section('Cloudflare Real IP Config');
-        if (file_exists($config->cloudflareRealipConf)) {
-            $this->check(true, "Config exists: {$config->cloudflareRealipConf}");
-
-            $age = time() - filemtime($config->cloudflareRealipConf);
-            $lastUpdated = date('Y-m-d', filemtime($config->cloudflareRealipConf));
-            if ($age > 30 * 86400) {
-                $this->warn("Config is older than 30 days (last updated: {$lastUpdated}). Run firewall:update-cloudflare.");
-            } else {
-                $this->check(true, "Config is up to date (last updated: {$lastUpdated})");
-            }
-        } else {
+        if (!file_exists($config->cloudflareRealipConf)) {
             $this->check(false, '', "Config missing: {$config->cloudflareRealipConf}");
+            return;
         }
 
-        // Banned IPs file
+        $this->check(true, "Config exists: {$config->cloudflareRealipConf}");
+
+        $age = time() - filemtime($config->cloudflareRealipConf);
+        $lastUpdated = date('Y-m-d', filemtime($config->cloudflareRealipConf));
+        if ($age > 30 * 86400) {
+            $this->warn("Config is older than 30 days (last updated: {$lastUpdated}). Run firewall:update-cloudflare.");
+        } else {
+            $this->check(true, "Config is up to date (last updated: {$lastUpdated})");
+        }
+    }
+
+    private function checkBannedIpsFile(FirewallConfig $config): void
+    {
         $this->io->section('Banned IPs File');
         $this->check(
             file_exists($config->nginxDenyFile),
             "File exists: {$config->nginxDenyFile}",
             "File missing: {$config->nginxDenyFile}",
         );
+    }
 
-        // Per-site checks
+    private function checkSites(FirewallConfig $config, Fail2Ban $fail2ban): void
+    {
         $this->io->section('Per-Site Checks');
         $discovery = new SiteDiscovery($config);
         $sites = $discovery->discoverProtected();
 
         if (empty($sites)) {
             $this->warn('No protected sites found (no sites with fail2ban.conf)');
+            return;
         }
 
         foreach ($sites as $site) {
-            $jail = 'forge-' . $site->shortName;
-            $this->io->newLine();
-            $this->io->text("  <options=bold>{$site->domain}</> ({$jail})");
+            $this->checkSite($site, $config, $fail2ban);
+        }
+    }
 
-            // Jail config
-            $jailPath = rtrim($config->jailDir, '/') . '/' . $jail . '.conf';
-            $this->check(
-                file_exists($jailPath),
-                "Jail config exists: {$jailPath}",
-                "Jail config missing: {$jailPath}",
-            );
+    private function checkSite(SiteInfo $site, FirewallConfig $config, Fail2Ban $fail2ban): void
+    {
+        $jail = 'forge-' . $site->shortName;
+        $this->io->newLine();
+        $this->io->text("  <options=bold>{$site->domain}</> ({$jail})");
 
-            // Filter config
-            $filterPath = rtrim($config->filterDir, '/') . '/' . $jail . '.conf';
-            $this->check(
-                file_exists($filterPath),
-                "Filter config exists: {$filterPath}",
-                "Filter config missing: {$filterPath}",
-            );
+        // Jail config
+        $jailPath = rtrim($config->jailDir, '/') . '/' . $jail . '.conf';
+        $this->check(
+            file_exists($jailPath),
+            "Jail config exists: {$jailPath}",
+            "Jail config missing: {$jailPath}",
+        );
 
-            // Jail active
-            exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $jailOutput, $jailExit);
-            $jailOutput = [];
-            $this->check(
-                $jailExit === 0,
-                "Jail is active",
-                "Jail is not active (run firewall:reload)",
-            );
+        // Filter config
+        $filterPath = rtrim($config->filterDir, '/') . '/' . $jail . '.conf';
+        $this->check(
+            file_exists($filterPath),
+            "Filter config exists: {$filterPath}",
+            "Filter config missing: {$filterPath}",
+        );
 
-            // Access log
-            if (file_exists($site->logPath) && is_readable($site->logPath)) {
-                $this->check(true, "Access log readable: {$site->logPath}");
-            } elseif (file_exists($site->logPath)) {
-                $this->warn("Access log exists but not readable: {$site->logPath}");
-            } else {
-                $this->warn("Access log not found: {$site->logPath}");
-            }
+        // Jail active
+        $this->check(
+            $fail2ban->isJailActive($jail),
+            "Jail is active",
+            "Jail is not active (run firewall:reload)",
+        );
 
-            // Banned-ips include in Forge site.conf
-            if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
-                $content = file_get_contents($site->forgeSiteConf);
-                $includeDirective = 'include ' . $config->nginxDenyFile . ';';
-                if (str_contains($content, $includeDirective)) {
-                    $this->check(true, "Banned-ips include present in {$site->forgeSiteConf}");
-                } else {
-                    $this->warn("Banned-ips include missing from {$site->forgeSiteConf}");
-                }
-            } elseif ($site->forgeSiteConf === null) {
-                $this->warn("No Forge site.conf found for {$site->domain}");
-            }
+        // Access log
+        if (file_exists($site->logPath) && is_readable($site->logPath)) {
+            $this->check(true, "Access log readable: {$site->logPath}");
+        } elseif (file_exists($site->logPath)) {
+            $this->warn("Access log exists but not readable: {$site->logPath}");
+        } else {
+            $this->warn("Access log not found: {$site->logPath}");
         }
 
-        // Summary
+        // Banned-ips include in Forge site.conf
+        if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
+            $content = file_get_contents($site->forgeSiteConf);
+            $includeDirective = 'include ' . $config->nginxDenyFile . ';';
+            if (str_contains($content, $includeDirective)) {
+                $this->check(true, "Banned-ips include present in {$site->forgeSiteConf}");
+            } else {
+                $this->warn("Banned-ips include missing from {$site->forgeSiteConf}");
+            }
+        } elseif ($site->forgeSiteConf === null) {
+            $this->warn("No Forge site.conf found for {$site->domain}");
+        }
+    }
+
+    private function showSummary(): int
+    {
         $this->io->newLine();
         $this->io->section('Summary');
         $total = $this->passed + $this->warnings + $this->failures;

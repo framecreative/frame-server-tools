@@ -3,6 +3,7 @@
 namespace App\Command;
 
 use App\Config\FirewallConfig;
+use App\Service\Fail2Ban;
 use App\Service\Nginx;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -45,6 +46,7 @@ class IpLookupCommand extends Command
 
         $config = new FirewallConfig();
         $nginx = new Nginx($config);
+        $fail2ban = new Fail2Ban($config);
         $found = false;
 
         // Check nginx deny file
@@ -59,14 +61,14 @@ class IpLookupCommand extends Command
 
         // Check fail2ban jails
         $this->io->section('Fail2ban jails');
-        $jails = $this->getFail2banJails();
+        $jails = $fail2ban->getJails();
 
         if (empty($jails)) {
             $this->io->text('  No fail2ban jails found (fail2ban may not be running).');
         } else {
             $jailMatches = [];
             foreach ($jails as $jail) {
-                if ($this->isIpInJail($ip, $jail)) {
+                if ($fail2ban->isIpInJail($ip, $jail)) {
                     $jailMatches[] = $jail;
                 }
             }
@@ -87,38 +89,5 @@ class IpLookupCommand extends Command
         }
 
         return Command::SUCCESS;
-    }
-
-    private function getFail2banJails(): array
-    {
-        exec('fail2ban-client status 2>&1', $output, $exitCode);
-        if ($exitCode !== 0) {
-            return [];
-        }
-
-        foreach ($output as $line) {
-            if (preg_match('/Jail list:\s*(.+)/', $line, $matches)) {
-                return array_map('trim', explode(',', $matches[1]));
-            }
-        }
-
-        return [];
-    }
-
-    private function isIpInJail(string $ip, string $jail): bool
-    {
-        exec('fail2ban-client status ' . escapeshellarg($jail) . ' 2>&1', $output, $exitCode);
-        if ($exitCode !== 0) {
-            return false;
-        }
-
-        foreach ($output as $line) {
-            if (preg_match('/Banned IP list:\s*(.+)/', $line, $matches)) {
-                $bannedIps = array_map('trim', explode(' ', $matches[1]));
-                return in_array($ip, $bannedIps, true);
-            }
-        }
-
-        return false;
     }
 }

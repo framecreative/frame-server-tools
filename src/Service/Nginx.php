@@ -90,6 +90,26 @@ class Nginx
     }
 
     /**
+     * Returns all bans from the deny file as [ip => comment].
+     */
+    public function getAllBans(): array
+    {
+        if (!file_exists($this->config->nginxDenyFile)) {
+            return [];
+        }
+
+        $bans = [];
+        $lines = file($this->config->nginxDenyFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        foreach ($lines as $line) {
+            if (preg_match('/^deny\s+([^;]+);\s*(?:#\s*(.*))?$/', $line, $m)) {
+                $bans[trim($m[1])] = trim($m[2] ?? '');
+            }
+        }
+
+        return $bans;
+    }
+
+    /**
      * Bans an IP by appending a deny line to the deny file.
      * Returns false if the IP is already banned.
      */

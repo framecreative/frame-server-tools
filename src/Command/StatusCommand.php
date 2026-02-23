@@ -3,6 +3,9 @@
 namespace App\Command;
 
 use App\Config\FirewallConfig;
+use App\Config\SiteInfo;
+use App\Service\Fail2Ban;
+use App\Service\Nginx;
 use App\Service\SiteDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -51,7 +54,19 @@ class StatusCommand extends Command
 
         $this->io->title('Firewall Status Dashboard');
 
-        // Cloudflare realip config
+        $fail2ban = new Fail2Ban($config);
+        $nginx = new Nginx($config);
+
+        $this->showCloudflareStatus($config);
+        $this->showBannedIps($nginx, $config);
+        $this->showFail2banService($fail2ban);
+        $this->showJailStatus($fail2ban, $config);
+
+        return Command::SUCCESS;
+    }
+
+    private function showCloudflareStatus(FirewallConfig $config): void
+    {
         $this->io->section('Cloudflare Real IP Config');
         if (file_exists($config->cloudflareRealipConf)) {
             $content = file_get_contents($config->cloudflareRealipConf);
@@ -60,74 +75,71 @@ class StatusCommand extends Command
         } else {
             $this->io->warning("Config not found: {$config->cloudflareRealipConf}");
         }
+    }
 
-        // Banned IPs file
+    private function showBannedIps(Nginx $nginx, FirewallConfig $config): void
+    {
         $this->io->section('Banned IPs');
-        if (file_exists($config->nginxDenyFile)) {
-            $content = file_get_contents($config->nginxDenyFile);
-            $banCount = substr_count($content, 'deny ');
-            $this->io->text("  File: {$config->nginxDenyFile} (exists, {$banCount} active bans)");
-
-            if ($banCount > 0) {
-                $lines = array_filter(explode("\n", trim($content)));
-                foreach ($lines as $line) {
-                    $this->io->text("    {$line}");
-                }
-            }
-        } else {
+        if (!file_exists($config->nginxDenyFile)) {
             $this->io->warning("Banned IPs file not found: {$config->nginxDenyFile}");
+            return;
         }
 
-        // fail2ban service status
+        $bans = $nginx->getAllBans();
+        $banCount = count($bans);
+        $this->io->text("  File: {$config->nginxDenyFile} (exists, {$banCount} active bans)");
+
+        foreach ($bans as $ip => $comment) {
+            $line = "deny {$ip};";
+            if ($comment !== '') {
+                $line .= " # {$comment}";
+            }
+            $this->io->text("    {$line}");
+        }
+    }
+
+    private function showFail2banService(Fail2Ban $fail2ban): void
+    {
         $this->io->section('fail2ban Service');
-        exec('fail2ban-client status 2>&1', $statusOutput, $exitCode);
-        if ($exitCode === 0) {
+        if ($fail2ban->isRunning()) {
             $this->io->text('  Status: running');
-            foreach ($statusOutput as $line) {
-                $this->io->text("  {$line}");
+            $jails = $fail2ban->getJails();
+            $this->io->text('  Number of jail: ' . count($jails));
+            if (!empty($jails)) {
+                $this->io->text('  Jail list: ' . implode(', ', $jails));
             }
         } else {
             $this->io->error('fail2ban is not running or not accessible');
         }
+    }
 
-        // Per-jail status
+    private function showJailStatus(Fail2Ban $fail2ban, FirewallConfig $config): void
+    {
         $this->io->section('Jail Status');
-        $finder = new Finder();
 
-        if (is_dir($config->jailDir)) {
-            $finder->files()->in($config->jailDir)->name('forge-*.conf');
-
-            foreach ($finder as $file) {
-                $jailName = $file->getFilenameWithoutExtension();
-                exec('fail2ban-client status ' . escapeshellarg($jailName) . ' 2>&1', $jailOutput, $jailExit);
-
-                if ($jailExit === 0) {
-                    $bannedCount = 0;
-                    foreach ($jailOutput as $line) {
-                        if (str_contains($line, 'Currently banned')) {
-                            preg_match('/(\d+)/', $line, $matches);
-                            $bannedCount = (int) ($matches[1] ?? 0);
-                        }
-                    }
-                    $this->io->text("  {$jailName}: enabled, {$bannedCount} currently banned");
-                } else {
-                    $this->io->text("  {$jailName}: not active");
-                }
-
-                $jailOutput = [];
-            }
-        } else {
+        if (!is_dir($config->jailDir)) {
             $this->io->text('  No jail directory found');
+            return;
         }
 
-        return Command::SUCCESS;
+        $finder = new Finder();
+        $finder->files()->in($config->jailDir)->name('forge-*.conf');
+
+        foreach ($finder as $file) {
+            $jailName = $file->getFilenameWithoutExtension();
+            if ($fail2ban->isJailActive($jailName)) {
+                $bannedCount = $fail2ban->getJailBannedCount($jailName);
+                $this->io->text("  {$jailName}: enabled, {$bannedCount} currently banned");
+            } else {
+                $this->io->text("  {$jailName}: not active");
+            }
+        }
     }
 
     private function executeSiteStatus(FirewallConfig $config, string $siteName): int
     {
         $discovery = new SiteDiscovery($config);
         $sites = $discovery->discoverAll();
-
         $site = $discovery->findSite($siteName, $sites);
 
         if ($site === null) {
@@ -141,15 +153,31 @@ class StatusCommand extends Command
 
         $this->io->title("Firewall Status: {$site->domain}");
 
-        // Site info
+        $fail2ban = new Fail2Ban($config);
+        $nginx = new Nginx($config);
+
+        $this->showSiteInfo($site);
+        $this->showAccessLog($site);
+        $this->showFail2banProtection($site);
+        $this->showNginxInclude($site, $config);
+        $this->showJailDetail($site, $fail2ban);
+        $this->showGlobalNginxBans($nginx, $config);
+
+        return Command::SUCCESS;
+    }
+
+    private function showSiteInfo(SiteInfo $site): void
+    {
         $this->io->section('Site Info');
         $this->io->text("  Domain:     {$site->domain}");
         $this->io->text("  Path:       {$site->sitePath}");
         $this->io->text("  Short name: {$site->shortName}");
         $this->io->text("  Nginx conf: {$site->nginxSiteConf}");
         $this->io->text("  Forge conf: " . ($site->forgeSiteConf ?? '<not found>'));
+    }
 
-        // Access log
+    private function showAccessLog(SiteInfo $site): void
+    {
         $this->io->section('Access Log');
         $this->io->text("  Log path: {$site->logPath}");
         if (file_exists($site->logPath)) {
@@ -158,16 +186,20 @@ class StatusCommand extends Command
         } else {
             $this->io->text('  Status:   <fg=yellow>not found</>');
         }
+    }
 
-        // fail2ban protection
+    private function showFail2banProtection(SiteInfo $site): void
+    {
         $this->io->section('fail2ban Protection');
         if ($site->fail2banConf !== null) {
             $this->io->text("  <fg=green>Enabled</> - config: {$site->fail2banConf}");
         } else {
             $this->io->text('  <fg=yellow>Not configured</> - no fail2ban.conf found for this site');
         }
+    }
 
-        // Nginx banned-ips include (Forge site.conf)
+    private function showNginxInclude(SiteInfo $site, FirewallConfig $config): void
+    {
         $this->io->section('Nginx Banned IPs Include');
         if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
             $nginxContent = file_get_contents($site->forgeSiteConf);
@@ -182,59 +214,55 @@ class StatusCommand extends Command
         } else {
             $this->io->text("  <fg=red>Forge site.conf not found:</> {$site->forgeSiteConf}");
         }
+    }
 
-        // fail2ban jail status with banned IP list
+    private function showJailDetail(SiteInfo $site, Fail2Ban $fail2ban): void
+    {
         $jailName = 'forge-' . $site->shortName;
         $this->io->section("fail2ban Jail: $jailName");
 
-        exec('fail2ban-client status ' . escapeshellarg($jailName) . ' 2>&1', $jailOutput, $jailExit);
-
-        if ($jailExit === 0) {
-            $bannedCount = 0;
-            $bannedIps = [];
-
-            foreach ($jailOutput as $line) {
-                if (preg_match('/Currently banned:\s*(\d+)/', $line, $matches)) {
-                    $bannedCount = (int) $matches[1];
-                }
-                if (preg_match('/Banned IP list:\s*(.+)/', $line, $matches)) {
-                    $bannedIps = array_filter(array_map('trim', explode(' ', $matches[1])));
-                }
-            }
-
-            $this->io->text("  Status: <fg=green>active</>");
-            $this->io->text("  Currently banned: $bannedCount");
-
-            if (!empty($bannedIps)) {
-                $this->io->newLine();
-                $this->io->text('  Banned IPs in this jail:');
-                foreach ($bannedIps as $ip) {
-                    $this->io->text("    - $ip");
-                }
-            }
-        } else {
+        if (!$fail2ban->isJailActive($jailName)) {
             $this->io->text('  Status: <fg=yellow>not active</>');
+            return;
         }
 
-        // Global nginx deny file bans
-        $this->io->section('Global Nginx Bans (all sites)');
-        if (file_exists($config->nginxDenyFile)) {
-            $content = file_get_contents($config->nginxDenyFile);
-            $lines = array_filter(explode("\n", trim($content)));
-            $banCount = count($lines);
-            $this->io->text("  File: {$config->nginxDenyFile} ({$banCount} active bans)");
+        $bannedCount = $fail2ban->getJailBannedCount($jailName);
+        $bannedIps = $fail2ban->getJailBannedIps($jailName);
 
-            if ($banCount > 0) {
-                $this->io->newLine();
-                foreach ($lines as $line) {
-                    $this->io->text("    {$line}");
-                }
+        $this->io->text("  Status: <fg=green>active</>");
+        $this->io->text("  Currently banned: $bannedCount");
+
+        if (!empty($bannedIps)) {
+            $this->io->newLine();
+            $this->io->text('  Banned IPs in this jail:');
+            foreach ($bannedIps as $ip) {
+                $this->io->text("    - $ip");
             }
-        } else {
+        }
+    }
+
+    private function showGlobalNginxBans(Nginx $nginx, FirewallConfig $config): void
+    {
+        $this->io->section('Global Nginx Bans (all sites)');
+        if (!file_exists($config->nginxDenyFile)) {
             $this->io->text("  Banned IPs file not found: {$config->nginxDenyFile}");
+            return;
         }
 
-        return Command::SUCCESS;
+        $bans = $nginx->getAllBans();
+        $banCount = count($bans);
+        $this->io->text("  File: {$config->nginxDenyFile} ({$banCount} active bans)");
+
+        if ($banCount > 0) {
+            $this->io->newLine();
+            foreach ($bans as $ip => $comment) {
+                $line = "deny {$ip};";
+                if ($comment !== '') {
+                    $line .= " # {$comment}";
+                }
+                $this->io->text("    {$line}");
+            }
+        }
     }
 
     private function formatBytes(int $bytes): string
