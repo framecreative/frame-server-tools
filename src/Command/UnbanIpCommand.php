@@ -17,6 +17,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class UnbanIpCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -25,11 +27,11 @@ class UnbanIpCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $ip = $input->getArgument('ip');
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            $io->error("Invalid IP address: $ip");
+            $this->io->error("Invalid IP address: $ip");
             return Command::FAILURE;
         }
 
@@ -37,32 +39,32 @@ class UnbanIpCommand extends Command
         $nginx = new Nginx($config);
 
         if (!$nginx->isIpBanned($ip)) {
-            $io->warning("IP $ip is not in the nginx deny file.");
+            $this->io->warning("IP $ip is not in the nginx deny file.");
             return Command::SUCCESS;
         }
 
         // Unban from fail2ban first to prevent re-banning on next cycle
         exec('fail2ban-client unban ' . escapeshellarg($ip) . ' 2>&1', $f2bOutput, $f2bExit);
         if ($f2bExit === 0) {
-            $io->text("Removed $ip from fail2ban.");
+            $this->io->text("Removed $ip from fail2ban.");
         }
 
         if (!$nginx->unbanIp($ip)) {
-            $io->error("Failed to remove $ip from deny file.");
+            $this->io->error("Failed to remove $ip from deny file.");
             return Command::FAILURE;
         }
 
         if (!$nginx->test()) {
-            $io->error('nginx config test failed after removing ban.');
+            $this->io->error('nginx config test failed after removing ban.');
             return Command::FAILURE;
         }
 
         if (!$nginx->reload()) {
-            $io->error('nginx reload failed.');
+            $this->io->error('nginx reload failed.');
             return Command::FAILURE;
         }
 
-        $io->success("Unbanned IP $ip");
+        $this->io->success("Unbanned IP $ip");
         return Command::SUCCESS;
     }
 }

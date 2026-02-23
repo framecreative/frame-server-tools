@@ -16,20 +16,22 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class ReloadFail2BanCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
         $fail2ban = new Fail2Ban($config);
 
-        $io->text('Reloading fail2ban...');
+        $this->io->text('Reloading fail2ban...');
 
         if ($fail2ban->reload()) {
-            $io->success('fail2ban reloaded successfully');
+            $this->io->success('fail2ban reloaded successfully');
             return Command::SUCCESS;
         }
 
-        $io->error('fail2ban reload failed');
+        $this->io->error('fail2ban reload failed');
         return Command::FAILURE;
     }
 }

@@ -17,6 +17,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class BanIpCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -26,12 +28,12 @@ class BanIpCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $ip = $input->getArgument('ip');
         $reason = $input->getArgument('reason');
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            $io->error("Invalid IP address: $ip");
+            $this->io->error("Invalid IP address: $ip");
             return Command::FAILURE;
         }
 
@@ -39,10 +41,10 @@ class BanIpCommand extends Command
         $nginx = new Nginx($config);
 
         if ($nginx->isIpBanned($ip)) {
-            $io->warning("IP $ip is already banned.");
+            $this->io->warning("IP $ip is already banned.");
             $line = $nginx->getBanLine($ip);
             if ($line) {
-                $io->text("  Existing entry: $line");
+                $this->io->text("  Existing entry: $line");
             }
             return Command::SUCCESS;
         }
@@ -50,17 +52,17 @@ class BanIpCommand extends Command
         $nginx->banIp($ip, $reason);
 
         if (!$nginx->test()) {
-            $io->error('nginx config test failed after adding ban. Removing the entry.');
+            $this->io->error('nginx config test failed after adding ban. Removing the entry.');
             $nginx->unbanIp($ip);
             return Command::FAILURE;
         }
 
         if (!$nginx->reload()) {
-            $io->error('nginx reload failed.');
+            $this->io->error('nginx reload failed.');
             return Command::FAILURE;
         }
 
-        $io->success("Banned IP $ip" . ($reason ? " (reason: $reason)" : ''));
+        $this->io->success("Banned IP $ip" . ($reason ? " (reason: $reason)" : ''));
         return Command::SUCCESS;
     }
 }

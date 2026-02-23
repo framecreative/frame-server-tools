@@ -19,6 +19,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class InitFirewallCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -29,7 +31,7 @@ class InitFirewallCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $dryRun = $input->getOption('dry-run');
         $skipCloudflare = $input->getOption('skip-cloudflare');
         $skipReload = $input->getOption('skip-reload');
@@ -40,135 +42,135 @@ class InitFirewallCommand extends Command
         $discovery = new SiteDiscovery($config);
 
         if ($dryRun) {
-            $io->note('DRY RUN - no files will be written, no services reloaded');
+            $this->io->note('DRY RUN - no files will be written, no services reloaded');
         }
 
         // Section 1: Nginx layer
-        $io->section('Setting up nginx ban layer');
+        $this->io->section('Setting up nginx ban layer');
 
         if (!$skipCloudflare) {
-            $io->text('Fetching current Cloudflare IP ranges...');
+            $this->io->text('Fetching current Cloudflare IP ranges...');
             $cfContent = $nginx->createCloudflareRealipConfig();
             if ($dryRun) {
-                $io->text("Would write to: {$config->cloudflareRealipConf}");
-                $io->block($cfContent, 'CONFIG');
+                $this->io->text("Would write to: {$config->cloudflareRealipConf}");
+                $this->io->block($cfContent, 'CONFIG');
             } else {
                 $nginx->writeCloudflareRealipConfig($cfContent);
-                $io->text("  > Cloudflare real IP config written to {$config->cloudflareRealipConf}");
+                $this->io->text("  > Cloudflare real IP config written to {$config->cloudflareRealipConf}");
             }
         } else {
-            $io->text('Skipping Cloudflare IP fetch (--skip-cloudflare)');
+            $this->io->text('Skipping Cloudflare IP fetch (--skip-cloudflare)');
         }
 
         if ($dryRun) {
-            $io->text("Would ensure banned IPs file exists at: {$config->nginxDenyFile}");
+            $this->io->text("Would ensure banned IPs file exists at: {$config->nginxDenyFile}");
         } else {
             if ($nginx->ensureBannedIpsFile()) {
-                $io->text("  > Created empty banned IPs file at {$config->nginxDenyFile}");
+                $this->io->text("  > Created empty banned IPs file at {$config->nginxDenyFile}");
             } else {
-                $io->text("  > Banned IPs file already exists at {$config->nginxDenyFile}");
+                $this->io->text("  > Banned IPs file already exists at {$config->nginxDenyFile}");
             }
         }
 
         // Section 2: Fail2Ban action
-        $io->section('Creating fail2ban nginx-deny-file action');
+        $this->io->section('Creating fail2ban nginx-deny-file action');
 
         if ($dryRun) {
-            $io->text("Would write to: {$config->actionDir}nginx-deny-file.conf");
-            $io->block($fail2ban->getActionContent(), 'CONFIG');
+            $this->io->text("Would write to: {$config->actionDir}nginx-deny-file.conf");
+            $this->io->block($fail2ban->getActionContent(), 'CONFIG');
         } else {
             $fail2ban->createAction();
-            $io->text("  > nginx-deny-file action written to {$config->actionDir}nginx-deny-file.conf");
+            $this->io->text("  > nginx-deny-file action written to {$config->actionDir}nginx-deny-file.conf");
         }
 
         // Section 3 & 4: Per-site filters, jails, nginx includes
-        $io->section('Creating per-site fail2ban filters and jails');
+        $this->io->section('Creating per-site fail2ban filters and jails');
 
         $sites = $discovery->discoverProtected();
 
         if (empty($sites)) {
-            $io->warning('No sites with fail2ban.conf found');
+            $this->io->warning('No sites with fail2ban.conf found');
         }
 
         foreach ($sites as $site) {
-            $io->text("> Processing {$site->domain}");
+            $this->io->text("> Processing {$site->domain}");
 
             if ($site->fail2banConf) {
-                $io->text("  > Found repo config at {$site->fail2banConf}");
+                $this->io->text("  > Found repo config at {$site->fail2banConf}");
             }
 
             // Filter
             if ($dryRun) {
-                $io->text("  Would write filter to: {$config->filterDir}forge-{$site->shortName}.conf");
-                $io->block($fail2ban->getFilterContent($site), 'FILTER');
+                $this->io->text("  Would write filter to: {$config->filterDir}forge-{$site->shortName}.conf");
+                $this->io->block($fail2ban->getFilterContent($site), 'FILTER');
             } else {
                 $fail2ban->createFilter($site);
-                $io->text("  > Filter written for forge-{$site->shortName}");
+                $this->io->text("  > Filter written for forge-{$site->shortName}");
             }
 
             // Jail
             if ($dryRun) {
-                $io->text("  Would write jail to: {$config->jailDir}forge-{$site->shortName}.conf");
-                $io->block($fail2ban->getJailContent($site), 'JAIL');
+                $this->io->text("  Would write jail to: {$config->jailDir}forge-{$site->shortName}.conf");
+                $this->io->block($fail2ban->getJailContent($site), 'JAIL');
             } else {
                 $fail2ban->createJail($site);
-                $io->text("  > Jail written for forge-{$site->shortName}");
+                $this->io->text("  > Jail written for forge-{$site->shortName}");
             }
 
             // Nginx include (Forge site.conf)
             if ($site->forgeSiteConf === null) {
-                $io->warning("  No Forge site.conf found for {$site->domain} - add banned-ips include manually");
+                $this->io->warning("  No Forge site.conf found for {$site->domain} - add banned-ips include manually");
             } elseif ($dryRun) {
-                $io->text("  Would append banned-ips include to: {$site->forgeSiteConf}");
+                $this->io->text("  Would append banned-ips include to: {$site->forgeSiteConf}");
             } else {
                 if ($nginx->injectBannedIpsInclude($site)) {
-                    $io->text("  > Appended banned-ips include to {$site->forgeSiteConf}");
+                    $this->io->text("  > Appended banned-ips include to {$site->forgeSiteConf}");
                 } else {
-                    $io->text("  > Banned-ips include already present in {$site->forgeSiteConf}");
+                    $this->io->text("  > Banned-ips include already present in {$site->forgeSiteConf}");
                 }
             }
         }
 
         // Section 5: Global jail.local
-        $io->section('Updating global fail2ban config');
+        $this->io->section('Updating global fail2ban config');
 
         if ($dryRun) {
-            $io->text("Would write to: {$config->jailLocalPath}");
-            $io->block($fail2ban->getJailLocalContent(), 'CONFIG');
+            $this->io->text("Would write to: {$config->jailLocalPath}");
+            $this->io->block($fail2ban->getJailLocalContent(), 'CONFIG');
         } else {
             $fail2ban->writeJailLocal();
-            $io->text('  > jail.local written with whitelist and nginx-deny-file as default action');
+            $this->io->text('  > jail.local written with whitelist and nginx-deny-file as default action');
         }
 
         // Section 6: Test and reload
         if (!$dryRun && !$skipReload) {
-            $io->section('Testing and reloading services');
+            $this->io->section('Testing and reloading services');
 
             if ($nginx->test()) {
-                $io->text('  > nginx config test passed');
+                $this->io->text('  > nginx config test passed');
                 if ($nginx->reload()) {
-                    $io->text('  > nginx reloaded');
+                    $this->io->text('  > nginx reloaded');
                 } else {
-                    $io->error('nginx reload failed');
+                    $this->io->error('nginx reload failed');
                 }
             } else {
-                $io->error('nginx config test failed! Check with: nginx -t');
-                $io->text('  > Skipping nginx reload - fix the config and reload manually');
+                $this->io->error('nginx config test failed! Check with: nginx -t');
+                $this->io->text('  > Skipping nginx reload - fix the config and reload manually');
             }
 
-            $io->text('Reloading fail2ban...');
+            $this->io->text('Reloading fail2ban...');
             if ($fail2ban->reload()) {
-                $io->text('  > fail2ban reloaded');
+                $this->io->text('  > fail2ban reloaded');
             } else {
-                $io->error('fail2ban reload failed');
+                $this->io->error('fail2ban reload failed');
             }
         } elseif ($skipReload) {
-            $io->note('Skipping service reload (--skip-reload)');
+            $this->io->note('Skipping service reload (--skip-reload)');
         }
 
         // Summary
-        $io->success('Setup complete');
-        $io->listing([
+        $this->io->success('Setup complete');
+        $this->io->listing([
             "Cloudflare real IP config: {$config->cloudflareRealipConf}",
             "Banned IPs file: {$config->nginxDenyFile}",
             "fail2ban action: {$config->actionDir}nginx-deny-file.conf",

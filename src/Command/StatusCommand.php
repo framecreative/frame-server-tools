@@ -18,6 +18,8 @@ use Symfony\Component\Finder\Finder;
 )]
 class StatusCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -26,57 +28,57 @@ class StatusCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
         $siteName = $input->getArgument('site');
 
         if ($siteName !== null) {
-            return $this->executeSiteStatus($io, $config, $siteName);
+            return $this->executeSiteStatus($config, $siteName);
         }
 
-        $io->title('Firewall Status Dashboard');
+        $this->io->title('Firewall Status Dashboard');
 
         // Cloudflare realip config
-        $io->section('Cloudflare Real IP Config');
+        $this->io->section('Cloudflare Real IP Config');
         if (file_exists($config->cloudflareRealipConf)) {
             $content = file_get_contents($config->cloudflareRealipConf);
             $ipCount = substr_count($content, 'set_real_ip_from');
-            $io->text("  Config: {$config->cloudflareRealipConf} (exists, {$ipCount} IP ranges)");
+            $this->io->text("  Config: {$config->cloudflareRealipConf} (exists, {$ipCount} IP ranges)");
         } else {
-            $io->warning("Config not found: {$config->cloudflareRealipConf}");
+            $this->io->warning("Config not found: {$config->cloudflareRealipConf}");
         }
 
         // Banned IPs file
-        $io->section('Banned IPs');
+        $this->io->section('Banned IPs');
         if (file_exists($config->nginxDenyFile)) {
             $content = file_get_contents($config->nginxDenyFile);
             $banCount = substr_count($content, 'deny ');
-            $io->text("  File: {$config->nginxDenyFile} (exists, {$banCount} active bans)");
+            $this->io->text("  File: {$config->nginxDenyFile} (exists, {$banCount} active bans)");
 
             if ($banCount > 0) {
                 $lines = array_filter(explode("\n", trim($content)));
                 foreach ($lines as $line) {
-                    $io->text("    {$line}");
+                    $this->io->text("    {$line}");
                 }
             }
         } else {
-            $io->warning("Banned IPs file not found: {$config->nginxDenyFile}");
+            $this->io->warning("Banned IPs file not found: {$config->nginxDenyFile}");
         }
 
         // fail2ban service status
-        $io->section('fail2ban Service');
+        $this->io->section('fail2ban Service');
         exec('fail2ban-client status 2>&1', $statusOutput, $exitCode);
         if ($exitCode === 0) {
-            $io->text('  Status: running');
+            $this->io->text('  Status: running');
             foreach ($statusOutput as $line) {
-                $io->text("  {$line}");
+                $this->io->text("  {$line}");
             }
         } else {
-            $io->error('fail2ban is not running or not accessible');
+            $this->io->error('fail2ban is not running or not accessible');
         }
 
         // Per-jail status
-        $io->section('Jail Status');
+        $this->io->section('Jail Status');
         $finder = new Finder();
 
         if (is_dir($config->jailDir)) {
@@ -94,21 +96,21 @@ class StatusCommand extends Command
                             $bannedCount = (int) ($matches[1] ?? 0);
                         }
                     }
-                    $io->text("  {$jailName}: enabled, {$bannedCount} currently banned");
+                    $this->io->text("  {$jailName}: enabled, {$bannedCount} currently banned");
                 } else {
-                    $io->text("  {$jailName}: not active");
+                    $this->io->text("  {$jailName}: not active");
                 }
 
                 $jailOutput = [];
             }
         } else {
-            $io->text('  No jail directory found');
+            $this->io->text('  No jail directory found');
         }
 
         return Command::SUCCESS;
     }
 
-    private function executeSiteStatus(SymfonyStyle $io, FirewallConfig $config, string $siteName): int
+    private function executeSiteStatus(FirewallConfig $config, string $siteName): int
     {
         $discovery = new SiteDiscovery($config);
         $sites = $discovery->discoverAll();
@@ -122,61 +124,61 @@ class StatusCommand extends Command
         }
 
         if ($site === null) {
-            $io->error("Site not found: $siteName");
-            $io->text('Available sites:');
+            $this->io->error("Site not found: $siteName");
+            $this->io->text('Available sites:');
             foreach ($sites as $s) {
-                $io->text("  - {$s->domain}");
+                $this->io->text("  - {$s->domain}");
             }
             return Command::FAILURE;
         }
 
-        $io->title("Firewall Status: {$site->domain}");
+        $this->io->title("Firewall Status: {$site->domain}");
 
         // Site info
-        $io->section('Site Info');
-        $io->text("  Domain:     {$site->domain}");
-        $io->text("  Path:       {$site->sitePath}");
-        $io->text("  Short name: {$site->shortName}");
-        $io->text("  Nginx conf: {$site->nginxSiteConf}");
-        $io->text("  Forge conf: " . ($site->forgeSiteConf ?? '<not found>'));
+        $this->io->section('Site Info');
+        $this->io->text("  Domain:     {$site->domain}");
+        $this->io->text("  Path:       {$site->sitePath}");
+        $this->io->text("  Short name: {$site->shortName}");
+        $this->io->text("  Nginx conf: {$site->nginxSiteConf}");
+        $this->io->text("  Forge conf: " . ($site->forgeSiteConf ?? '<not found>'));
 
         // Access log
-        $io->section('Access Log');
-        $io->text("  Log path: {$site->logPath}");
+        $this->io->section('Access Log');
+        $this->io->text("  Log path: {$site->logPath}");
         if (file_exists($site->logPath)) {
             $size = filesize($site->logPath);
-            $io->text('  Status:   <fg=green>exists</> (' . $this->formatBytes($size) . ')');
+            $this->io->text('  Status:   <fg=green>exists</> (' . $this->formatBytes($size) . ')');
         } else {
-            $io->text('  Status:   <fg=yellow>not found</>');
+            $this->io->text('  Status:   <fg=yellow>not found</>');
         }
 
         // fail2ban protection
-        $io->section('fail2ban Protection');
+        $this->io->section('fail2ban Protection');
         if ($site->fail2banConf !== null) {
-            $io->text("  <fg=green>Enabled</> - config: {$site->fail2banConf}");
+            $this->io->text("  <fg=green>Enabled</> - config: {$site->fail2banConf}");
         } else {
-            $io->text('  <fg=yellow>Not configured</> - no fail2ban.conf found for this site');
+            $this->io->text('  <fg=yellow>Not configured</> - no fail2ban.conf found for this site');
         }
 
         // Nginx banned-ips include (Forge site.conf)
-        $io->section('Nginx Banned IPs Include');
+        $this->io->section('Nginx Banned IPs Include');
         if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
             $nginxContent = file_get_contents($site->forgeSiteConf);
             $includeDirective = 'include ' . $config->nginxDenyFile . ';';
             if (str_contains($nginxContent, $includeDirective)) {
-                $io->text("  <fg=green>Present</> - banned IPs include found in {$site->forgeSiteConf}");
+                $this->io->text("  <fg=green>Present</> - banned IPs include found in {$site->forgeSiteConf}");
             } else {
-                $io->text("  <fg=yellow>Missing</> - banned IPs include not found in {$site->forgeSiteConf}");
+                $this->io->text("  <fg=yellow>Missing</> - banned IPs include not found in {$site->forgeSiteConf}");
             }
         } elseif ($site->forgeSiteConf === null) {
-            $io->text("  <fg=red>No Forge site.conf found for this domain</>");
+            $this->io->text("  <fg=red>No Forge site.conf found for this domain</>");
         } else {
-            $io->text("  <fg=red>Forge site.conf not found:</> {$site->forgeSiteConf}");
+            $this->io->text("  <fg=red>Forge site.conf not found:</> {$site->forgeSiteConf}");
         }
 
         // fail2ban jail status with banned IP list
         $jailName = 'forge-' . $site->shortName;
-        $io->section("fail2ban Jail: $jailName");
+        $this->io->section("fail2ban Jail: $jailName");
 
         exec('fail2ban-client status ' . escapeshellarg($jailName) . ' 2>&1', $jailOutput, $jailExit);
 
@@ -193,36 +195,36 @@ class StatusCommand extends Command
                 }
             }
 
-            $io->text("  Status: <fg=green>active</>");
-            $io->text("  Currently banned: $bannedCount");
+            $this->io->text("  Status: <fg=green>active</>");
+            $this->io->text("  Currently banned: $bannedCount");
 
             if (!empty($bannedIps)) {
-                $io->newLine();
-                $io->text('  Banned IPs in this jail:');
+                $this->io->newLine();
+                $this->io->text('  Banned IPs in this jail:');
                 foreach ($bannedIps as $ip) {
-                    $io->text("    - $ip");
+                    $this->io->text("    - $ip");
                 }
             }
         } else {
-            $io->text('  Status: <fg=yellow>not active</>');
+            $this->io->text('  Status: <fg=yellow>not active</>');
         }
 
         // Global nginx deny file bans
-        $io->section('Global Nginx Bans (all sites)');
+        $this->io->section('Global Nginx Bans (all sites)');
         if (file_exists($config->nginxDenyFile)) {
             $content = file_get_contents($config->nginxDenyFile);
             $lines = array_filter(explode("\n", trim($content)));
             $banCount = count($lines);
-            $io->text("  File: {$config->nginxDenyFile} ({$banCount} active bans)");
+            $this->io->text("  File: {$config->nginxDenyFile} ({$banCount} active bans)");
 
             if ($banCount > 0) {
-                $io->newLine();
+                $this->io->newLine();
                 foreach ($lines as $line) {
-                    $io->text("    {$line}");
+                    $this->io->text("    {$line}");
                 }
             }
         } else {
-            $io->text("  Banned IPs file not found: {$config->nginxDenyFile}");
+            $this->io->text("  Banned IPs file not found: {$config->nginxDenyFile}");
         }
 
         return Command::SUCCESS;

@@ -26,7 +26,7 @@ composer install
 ./frmdv firewall:status [site]     # Dashboard of all firewall components, or detailed status for one site
 ./frmdv firewall:update-cloudflare # Refresh Cloudflare IP ranges (for cron jobs)
 ./frmdv firewall:reload            # Reload fail2ban service
-./frmdv firewall:reload-jail <jail|all> [--regenerate]  # Reload specific jail or all jails
+./frmdv firewall:refresh-jail [site] [--no-regenerate]  # Refresh specific jail by domain/shortName, or all jails
 ./frmdv sites:list                 # List all discovered sites and their protection status
 ```
 

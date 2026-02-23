@@ -16,19 +16,21 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class SitesListCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
         $discovery = new SiteDiscovery($config);
 
         $sites = $discovery->discoverAll();
         $total = count($sites);
 
-        $io->title('Discovered Sites');
+        $this->io->title('Discovered Sites');
 
         if ($total === 0) {
-            $io->warning('No sites found.');
+            $this->io->warning('No sites found.');
             return Command::SUCCESS;
         }
 
@@ -42,8 +44,8 @@ class SitesListCommand extends Command
             $rows[] = [$site->domain, $site->shortName, $hasFail2ban ? 'Yes' : 'No', $site->sitePath];
         }
 
-        $io->table(['Domain', 'Short Name', 'Fail2ban.conf', 'Path'], $rows);
-        $io->success("Total sites: {$total} ({$protected} protected, " . ($total - $protected) . " unprotected)");
+        $this->io->table(['Domain', 'Short Name', 'Fail2ban.conf', 'Path'], $rows);
+        $this->io->success("Total sites: {$total} ({$protected} protected, " . ($total - $protected) . " unprotected)");
 
         return Command::SUCCESS;
     }

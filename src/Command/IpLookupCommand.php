@@ -17,6 +17,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class IpLookupCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -25,11 +27,11 @@ class IpLookupCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $ip = $input->getArgument('ip');
 
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            $io->error("Invalid IP address: $ip");
+            $this->io->error("Invalid IP address: $ip");
             return Command::FAILURE;
         }
 
@@ -38,21 +40,21 @@ class IpLookupCommand extends Command
         $found = false;
 
         // Check nginx deny file
-        $io->section('Nginx deny file');
+        $this->io->section('Nginx deny file');
         $banLine = $nginx->getBanLine($ip);
         if ($banLine) {
-            $io->text("  <fg=red>BANNED</> $banLine");
+            $this->io->text("  <fg=red>BANNED</> $banLine");
             $found = true;
         } else {
-            $io->text('  Not found in nginx deny file.');
+            $this->io->text('  Not found in nginx deny file.');
         }
 
         // Check fail2ban jails
-        $io->section('Fail2ban jails');
+        $this->io->section('Fail2ban jails');
         $jails = $this->getFail2banJails();
 
         if (empty($jails)) {
-            $io->text('  No fail2ban jails found (fail2ban may not be running).');
+            $this->io->text('  No fail2ban jails found (fail2ban may not be running).');
         } else {
             $jailMatches = [];
             foreach ($jails as $jail) {
@@ -64,16 +66,16 @@ class IpLookupCommand extends Command
             if (!empty($jailMatches)) {
                 $found = true;
                 foreach ($jailMatches as $jail) {
-                    $io->text("  <fg=red>BANNED</> in jail: $jail");
+                    $this->io->text("  <fg=red>BANNED</> in jail: $jail");
                 }
             } else {
-                $io->text('  Not found in any fail2ban jail.');
+                $this->io->text('  Not found in any fail2ban jail.');
             }
         }
 
         if (!$found) {
-            $io->newLine();
-            $io->text("<fg=green>IP $ip is not banned anywhere.</>");
+            $this->io->newLine();
+            $this->io->text("<fg=green>IP $ip is not banned anywhere.</>");
         }
 
         return Command::SUCCESS;

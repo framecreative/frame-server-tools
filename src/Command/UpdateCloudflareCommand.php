@@ -17,6 +17,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 )]
 class UpdateCloudflareCommand extends Command
 {
+    private SymfonyStyle $io;
+
     protected function configure(): void
     {
         $this
@@ -25,33 +27,33 @@ class UpdateCloudflareCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io = new SymfonyStyle($input, $output);
+        $this->io = new SymfonyStyle($input, $output);
         $config = new FirewallConfig();
         $nginx = new Nginx($config);
 
-        $io->text('Fetching current Cloudflare IP ranges...');
+        $this->io->text('Fetching current Cloudflare IP ranges...');
 
         $content = $nginx->createCloudflareRealipConfig();
         $nginx->writeCloudflareRealipConfig($content);
 
         $ipCount = substr_count($content, 'set_real_ip_from');
-        $io->text("  > Written {$ipCount} IP ranges to {$config->cloudflareRealipConf}");
+        $this->io->text("  > Written {$ipCount} IP ranges to {$config->cloudflareRealipConf}");
 
         if ($input->getOption('reload')) {
             if ($nginx->test()) {
-                $io->text('  > nginx config test passed');
+                $this->io->text('  > nginx config test passed');
                 if ($nginx->reload()) {
-                    $io->success('Cloudflare IPs updated and nginx reloaded');
+                    $this->io->success('Cloudflare IPs updated and nginx reloaded');
                 } else {
-                    $io->error('nginx reload failed');
+                    $this->io->error('nginx reload failed');
                     return Command::FAILURE;
                 }
             } else {
-                $io->error('nginx config test failed! Check with: nginx -t');
+                $this->io->error('nginx config test failed! Check with: nginx -t');
                 return Command::FAILURE;
             }
         } else {
-            $io->success('Cloudflare IPs updated (run with --reload to reload nginx)');
+            $this->io->success('Cloudflare IPs updated (run with --reload to reload nginx)');
         }
 
         return Command::SUCCESS;
