@@ -162,6 +162,15 @@ CONF;
     }
 
     /**
+     * Bans an IP in a specific jail. Returns true on success.
+     */
+    public function banIp(string $ip, string $jailName): bool
+    {
+        exec('fail2ban-client set ' . escapeshellarg($jailName) . ' banip ' . escapeshellarg($ip) . ' 2>&1', $output, $exitCode);
+        return $exitCode === 0;
+    }
+
+    /**
      * Reloads the fail2ban service. Returns true on success.
      */
     public function reload(): bool
