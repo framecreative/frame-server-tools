@@ -77,6 +77,6 @@ class FirewallConfig
      */
     public function getShortName(string $domain): string
     {
-        return substr($domain, 0, 18);
+        return rtrim(substr($domain, 0, 18), '.');
     }
 }
