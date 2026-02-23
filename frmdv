@@ -3,6 +3,7 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
+use App\Command\AccessLogCommand;
 use App\Command\BanIpCommand;
 use App\Command\InitFirewallCommand;
 use App\Command\IpLookupCommand;
@@ -15,6 +16,7 @@ use App\Command\UpdateCloudflareCommand;
 use Symfony\Component\Console\Application;
 
 $application = new Application('Frame Server Tools', '1.0.0');
+$application->addCommand(new AccessLogCommand());
 $application->addCommand(new BanIpCommand());
 $application->addCommand(new InitFirewallCommand());
 $application->addCommand(new IpLookupCommand());
