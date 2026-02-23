@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Command;
+namespace App\Command\Firewall;
 
 use App\Service\Fail2Ban;
 use App\Config\FirewallConfig;

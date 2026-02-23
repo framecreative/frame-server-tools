@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Command;
+namespace App\Command\Firewall;
 
 use App\Config\FirewallConfig;
 use App\Service\Nginx;

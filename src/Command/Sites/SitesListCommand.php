@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Command;
+namespace App\Command\Sites;
 
 use App\Config\FirewallConfig;
 use App\Service\SiteDiscovery;

@@ -3,19 +3,19 @@
 
 require __DIR__ . '/vendor/autoload.php';
 
-use App\Command\AccessLogCommand;
-use App\Command\BanIpCommand;
-use App\Command\BanListCommand;
-use App\Command\HealthCommand;
-use App\Command\IgnoredIpsCommand;
-use App\Command\InitFirewallCommand;
-use App\Command\IpLookupCommand;
-use App\Command\ReloadFail2BanCommand;
-use App\Command\RefreshJailConfigCommand;
-use App\Command\SitesListCommand;
-use App\Command\StatusCommand;
-use App\Command\UnbanIpCommand;
-use App\Command\UpdateCloudflareCommand;
+use App\Command\Firewall\AccessLogCommand;
+use App\Command\Firewall\BanIpCommand;
+use App\Command\Firewall\BanListCommand;
+use App\Command\Firewall\HealthCommand;
+use App\Command\Firewall\IgnoredIpsCommand;
+use App\Command\Firewall\InitFirewallCommand;
+use App\Command\Firewall\IpLookupCommand;
+use App\Command\Firewall\ReloadFail2BanCommand;
+use App\Command\Firewall\RefreshJailConfigCommand;
+use App\Command\Firewall\StatusCommand;
+use App\Command\Firewall\UnbanIpCommand;
+use App\Command\Firewall\UpdateCloudflareCommand;
+use App\Command\Sites\SitesListCommand;
 use Symfony\Component\Console\Application;
 
 $application = new Application('Frame Server Tools', '1.0.0');
