@@ -11,5 +11,6 @@ class SiteInfo
         public readonly ?string $fail2banConf,
         public readonly string $logPath,
         public readonly string $nginxSiteConf,
+        public readonly ?string $forgeSiteConf = null,
     ) {}
 }

@@ -138,6 +138,7 @@ class StatusCommand extends Command
         $io->text("  Path:       {$site->sitePath}");
         $io->text("  Short name: {$site->shortName}");
         $io->text("  Nginx conf: {$site->nginxSiteConf}");
+        $io->text("  Forge conf: " . ($site->forgeSiteConf ?? '<not found>'));
 
         // Access log
         $io->section('Access Log');
@@ -157,18 +158,20 @@ class StatusCommand extends Command
             $io->text('  <fg=yellow>Not configured</> - no fail2ban.conf found for this site');
         }
 
-        // Nginx banned-ips include
+        // Nginx banned-ips include (Forge site.conf)
         $io->section('Nginx Banned IPs Include');
-        if (file_exists($site->nginxSiteConf)) {
-            $nginxContent = file_get_contents($site->nginxSiteConf);
+        if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
+            $nginxContent = file_get_contents($site->forgeSiteConf);
             $includeDirective = 'include ' . $config->nginxDenyFile . ';';
             if (str_contains($nginxContent, $includeDirective)) {
-                $io->text('  <fg=green>Injected</> - banned IPs include is present in nginx config');
+                $io->text("  <fg=green>Present</> - banned IPs include found in {$site->forgeSiteConf}");
             } else {
-                $io->text('  <fg=yellow>Missing</> - banned IPs include not found in nginx config');
+                $io->text("  <fg=yellow>Missing</> - banned IPs include not found in {$site->forgeSiteConf}");
             }
+        } elseif ($site->forgeSiteConf === null) {
+            $io->text("  <fg=red>No Forge site.conf found for this domain</>");
         } else {
-            $io->text("  <fg=red>Nginx config not found:</> {$site->nginxSiteConf}");
+            $io->text("  <fg=red>Forge site.conf not found:</> {$site->forgeSiteConf}");
         }
 
         // fail2ban jail status with banned IP list

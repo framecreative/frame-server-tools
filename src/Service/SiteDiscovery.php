@@ -42,6 +42,8 @@ class SiteDiscovery
             $logPath = '/var/log/nginx/' . $domain . '-access.log';
             $nginxSiteConf = rtrim($this->config->nginxSitesAvailable, '/') . '/' . $domain;
 
+            $forgeSiteConf = $this->findForgeSiteConf($domain);
+
             $sites[] = new SiteInfo(
                 domain: $domain,
                 sitePath: $sitePath,
@@ -49,6 +51,7 @@ class SiteDiscovery
                 fail2banConf: $fail2banConf,
                 logPath: $logPath,
                 nginxSiteConf: $nginxSiteConf,
+                forgeSiteConf: $forgeSiteConf,
             );
         }
 
@@ -63,5 +66,38 @@ class SiteDiscovery
     public function discoverProtected(): array
     {
         return array_values(array_filter($this->discoverAll(), fn(SiteInfo $site) => $site->fail2banConf !== null));
+    }
+
+    /**
+     * Finds the Forge site.conf for a domain by scanning forge-conf site ID directories.
+     */
+    private function findForgeSiteConf(string $domain): ?string
+    {
+        $forgeConfPath = rtrim($this->config->forgeConfPath, '/');
+
+        if (!is_dir($forgeConfPath)) {
+            return null;
+        }
+
+        $siteIdDirs = @scandir($forgeConfPath);
+        if ($siteIdDirs === false) {
+            return null;
+        }
+
+        foreach ($siteIdDirs as $siteId) {
+            if ($siteId === '.' || $siteId === '..') {
+                continue;
+            }
+
+            $domainSubdir = $forgeConfPath . '/' . $siteId . '/' . $domain;
+            if (is_dir($domainSubdir)) {
+                $siteConf = $forgeConfPath . '/' . $siteId . '/site.conf';
+                if (file_exists($siteConf)) {
+                    return $siteConf;
+                }
+            }
+        }
+
+        return null;
     }
 }

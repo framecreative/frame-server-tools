@@ -115,18 +115,16 @@ class InitFirewallCommand extends Command
                 $io->text("  > Jail written for forge-{$site->shortName}");
             }
 
-            // Nginx include
-            if ($dryRun) {
-                $io->text("  Would inject banned-ips include into: {$site->nginxSiteConf}");
+            // Nginx include (Forge site.conf)
+            if ($site->forgeSiteConf === null) {
+                $io->warning("  No Forge site.conf found for {$site->domain} - add banned-ips include manually");
+            } elseif ($dryRun) {
+                $io->text("  Would append banned-ips include to: {$site->forgeSiteConf}");
             } else {
                 if ($nginx->injectBannedIpsInclude($site)) {
-                    $io->text("  > Added banned-ips include to {$site->nginxSiteConf}");
+                    $io->text("  > Appended banned-ips include to {$site->forgeSiteConf}");
                 } else {
-                    if (!file_exists($site->nginxSiteConf)) {
-                        $io->warning("  nginx config not found at {$site->nginxSiteConf} - add include manually");
-                    } else {
-                        $io->text("  > Banned-ips include already present in {$site->nginxSiteConf}");
-                    }
+                    $io->text("  > Banned-ips include already present in {$site->forgeSiteConf}");
                 }
             }
         }

@@ -68,30 +68,24 @@ class Nginx
     }
 
     /**
-     * Injects the banned-ips.conf include into a site's nginx config.
-     * Returns true if injected, false if already present or config not found.
+     * Appends the banned-ips.conf include to the Forge site.conf.
+     * Returns true if appended, false if already present, file missing, or no forge conf.
      */
     public function injectBannedIpsInclude(SiteInfo $site): bool
     {
-        if (!file_exists($site->nginxSiteConf)) {
+        if ($site->forgeSiteConf === null || !file_exists($site->forgeSiteConf)) {
             return false;
         }
 
-        $content = file_get_contents($site->nginxSiteConf);
+        $content = file_get_contents($site->forgeSiteConf);
         $includeDirective = 'include ' . $this->config->nginxDenyFile . ';';
 
         if (str_contains($content, $includeDirective)) {
             return false;
         }
 
-        $content = preg_replace(
-            '/server\s*\{/',
-            "server {\n    # fail2ban: block banned IPs at the nginx level\n    $includeDirective",
-            $content,
-            1,
-        );
-
-        file_put_contents($site->nginxSiteConf, $content);
+        $comment = '# Frame Firewall banned IPs';
+        file_put_contents($site->forgeSiteConf, rtrim($content) . "\n" . $comment . "\n" . $includeDirective . "\n");
         return true;
     }
 

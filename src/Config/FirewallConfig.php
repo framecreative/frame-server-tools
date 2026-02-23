@@ -17,6 +17,7 @@ class FirewallConfig
     public readonly string $nginxDenyFile;
     public readonly string $cloudflareRealipConf;
     public readonly string $nginxSitesAvailable;
+    public readonly string $forgeConfPath;
     public readonly string $homePath;
 
     public function __construct(
@@ -27,6 +28,7 @@ class FirewallConfig
         ?string $nginxDenyFile = null,
         ?string $cloudflareRealipConf = null,
         ?string $nginxSitesAvailable = null,
+        ?string $forgeConfPath = null,
         ?string $homePath = null,
     ) {
         $configPath = dirname(__DIR__, 2) . '/config.json';
@@ -42,6 +44,7 @@ class FirewallConfig
         $this->nginxDenyFile = $nginxDenyFile ?? '/etc/nginx/conf.d/banned-ips.conf';
         $this->cloudflareRealipConf = $cloudflareRealipConf ?? '/etc/nginx/conf.d/cloudflare-realip.conf';
         $this->nginxSitesAvailable = $nginxSitesAvailable ?? '/etc/nginx/sites-available/';
+        $this->forgeConfPath = $forgeConfPath ?? '/etc/nginx/forge-conf/';
         $this->homePath = $homePath ?? '/home';
     }
 
