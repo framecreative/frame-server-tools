@@ -19,6 +19,7 @@ class FirewallConfig
     public readonly string $nginxSitesAvailable;
     public readonly string $forgeConfPath;
     public readonly string $homePath;
+    private readonly string $configPath;
 
     public function __construct(
         ?string $filterDir = null,
@@ -31,8 +32,8 @@ class FirewallConfig
         ?string $forgeConfPath = null,
         ?string $homePath = null,
     ) {
-        $configPath = dirname(__DIR__, 2) . '/config.json';
-        $config = json_decode(file_get_contents($configPath), true);
+        $this->configPath = dirname(__DIR__, 2) . '/config.json';
+        $config = json_decode(file_get_contents($this->configPath), true);
 
         $this->forbiddenPaths = $config['forbidden_paths'] ?? [];
         $this->ignoredIps = $config['ignored_ips'] ?? [];
@@ -78,5 +79,17 @@ class FirewallConfig
     public function getShortName(string $domain): string
     {
         return rtrim(substr($domain, 0, 18), '.');
+    }
+
+    /**
+     * Replaces the ignored_ips array in config.json and writes it back.
+     *
+     * @param string[] $ips
+     */
+    public function saveIgnoredIps(array $ips): void
+    {
+        $config = json_decode(file_get_contents($this->configPath), true);
+        $config['ignored_ips'] = array_values($ips);
+        file_put_contents($this->configPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
     }
 }
