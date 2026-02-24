@@ -5,6 +5,7 @@ namespace App\Command\Firewall;
 use App\Config\FirewallConfig;
 use App\Config\SiteInfo;
 use App\Service\Fail2Ban;
+use App\Service\ForgeApi;
 use App\Service\Nginx;
 use App\Service\SiteDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -26,14 +27,17 @@ use Symfony\Component\Console\Style\SymfonyStyle;
       4. Generates per-site fail2ban filters and jails for each site with a fail2ban.conf
       5. Injects the banned-ips include into each Forge site.conf
       6. Writes jail.local with whitelisted IPs and default action
-      7. Tests and reloads nginx and fail2ban
+      7. Registers a weekly Cloudflare update cron via the Forge API (if configured)
+      8. Tests and reloads nginx and fail2ban
 
     Use --dry-run to preview all generated configs without writing anything.
+    Set FORGE_API_TOKEN and FORGE_SERVER_ID env vars for automatic cron setup.
     HELP,
     usages: [
         'firewall:init',
         'firewall:init --dry-run',
         'firewall:init --skip-cloudflare --skip-reload',
+        'firewall:init --skip-cron',
     ],
 )]
 class InitFirewallCommand extends Command
@@ -50,7 +54,8 @@ class InitFirewallCommand extends Command
         $this
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Print generated config content without writing files')
             ->addOption('skip-cloudflare', null, InputOption::VALUE_NONE, 'Skip Cloudflare IP fetch')
-            ->addOption('skip-reload', null, InputOption::VALUE_NONE, 'Write configs only, don\'t reload services');
+            ->addOption('skip-reload', null, InputOption::VALUE_NONE, 'Write configs only, don\'t reload services')
+            ->addOption('skip-cron', null, InputOption::VALUE_NONE, 'Skip Cloudflare update cron setup via Forge API');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -70,6 +75,7 @@ class InitFirewallCommand extends Command
         $this->createFail2banAction();
         $this->processSites();
         $this->updateGlobalJailConfig();
+        $this->setupCloudflareCron($input->getOption('skip-cron'));
 
         if (!$this->dryRun && !$input->getOption('skip-reload')) {
             $this->reloadServices();
@@ -190,6 +196,45 @@ class InitFirewallCommand extends Command
             $this->fail2ban->writeJailLocal();
             $this->io->text('  > jail.local written with whitelist and nginx-deny-file as default action');
         }
+    }
+
+    private function setupCloudflareCron(bool $skipCron): void
+    {
+        $this->io->section('Cloudflare update cron');
+
+        if ($skipCron) {
+            $this->io->text('Skipping Cloudflare cron setup (--skip-cron)');
+            return;
+        }
+
+        $forgeApi = new ForgeApi($this->config);
+
+        if (!$forgeApi->isConfigured()) {
+            $this->io->text('Skipping Cloudflare cron setup (FORGE_API_TOKEN/FORGE_SERVER_ID env vars not set)');
+            return;
+        }
+
+        $frmdvPath = realpath(dirname(__DIR__, 3) . '/frmdv');
+        $cronCommand = $frmdvPath . ' firewall:update-cloudflare --reload';
+
+        if ($this->dryRun) {
+            $this->io->text("Would register Forge scheduled job:");
+            $this->io->text("  Command:   {$cronCommand}");
+            $this->io->text("  Frequency: weekly");
+            $this->io->text("  User:      root");
+            return;
+        }
+
+        $jobs = $forgeApi->listJobs();
+        foreach ($jobs as $job) {
+            if (str_contains($job['command'], 'firewall:update-cloudflare')) {
+                $this->io->text("  > Cloudflare update cron already registered (job #{$job['id']}, {$job['frequency']})");
+                return;
+            }
+        }
+
+        $job = $forgeApi->createJob($cronCommand, 'weekly', 'root');
+        $this->io->text("  > Cloudflare update cron created (job #{$job['id']}, weekly)");
     }
 
     private function reloadServices(): void

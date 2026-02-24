@@ -5,6 +5,7 @@ namespace App\Command\Firewall;
 use App\Config\FirewallConfig;
 use App\Config\SiteInfo;
 use App\Service\Fail2Ban;
+use App\Service\ForgeApi;
 use App\Service\Nginx;
 use App\Service\SiteDiscovery;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -47,6 +48,7 @@ class HealthCommand extends Command
         $this->checkCloudflareConfig($config);
         $this->checkBannedIpsFile($config);
         $this->checkSites($config, $fail2ban, $nginx);
+        $this->checkCloudflareCron(new ForgeApi($config));
 
         return $this->showSummary();
     }
@@ -164,6 +166,32 @@ class HealthCommand extends Command
         } elseif ($site->forgeSiteConf === null) {
             $this->warn("No Forge site.conf found for {$site->domain}");
         }
+    }
+
+    private function checkCloudflareCron(ForgeApi $forgeApi): void
+    {
+        $this->io->section('Cloudflare Update Cron');
+
+        if (!$forgeApi->isConfigured()) {
+            $this->warn('Forge API not configured (set FORGE_API_TOKEN/FORGE_SERVER_ID env vars)');
+            return;
+        }
+
+        try {
+            $jobs = $forgeApi->listJobs();
+        } catch (\RuntimeException $e) {
+            $this->check(false, '', 'Failed to query Forge API: ' . $e->getMessage());
+            return;
+        }
+
+        foreach ($jobs as $job) {
+            if (str_contains($job['command'], 'firewall:update-cloudflare')) {
+                $this->check(true, "Cloudflare update cron registered (job #{$job['id']}, {$job['frequency']})");
+                return;
+            }
+        }
+
+        $this->check(false, '', 'No Cloudflare update cron found. Run firewall:init to create one.');
     }
 
     private function showSummary(): int

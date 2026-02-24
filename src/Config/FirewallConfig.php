@@ -10,6 +10,9 @@ class FirewallConfig
     /** @var string[] */
     public readonly array $ignoredIps;
 
+    public readonly string $forgeApiToken;
+    public readonly string $forgeServerId;
+
     public readonly string $filterDir;
     public readonly string $jailDir;
     public readonly string $jailLocalPath;
@@ -32,11 +35,15 @@ class FirewallConfig
         ?string $forgeConfPath = null,
         ?string $homePath = null,
     ) {
-        $this->configPath = dirname(__DIR__, 2) . '/config.json';
+        $baseDir = dirname(__DIR__, 2);
+        $this->configPath = $baseDir . '/config.json';
+        $this->loadEnvFile($baseDir . '/.env');
         $config = json_decode(file_get_contents($this->configPath), true);
 
         $this->forbiddenPaths = $config['forbidden_paths'] ?? [];
         $this->ignoredIps = $config['ignored_ips'] ?? [];
+        $this->forgeApiToken = getenv('FORGE_API_TOKEN') ?: '';
+        $this->forgeServerId = getenv('FORGE_SERVER_ID') ?: '';
 
         $this->filterDir = $filterDir ?? '/etc/fail2ban/filter.d/';
         $this->jailDir = $jailDir ?? '/etc/fail2ban/jail.d/';
@@ -47,6 +54,30 @@ class FirewallConfig
         $this->nginxSitesAvailable = $nginxSitesAvailable ?? '/etc/nginx/sites-available/';
         $this->forgeConfPath = $forgeConfPath ?? '/etc/nginx/forge-conf/';
         $this->homePath = $homePath ?? '/home';
+    }
+
+    /**
+     * Loads variables from a .env file into the environment (does not override existing values).
+     */
+    private function loadEnvFile(string $path): void
+    {
+        if (!file_exists($path)) {
+            return;
+        }
+
+        foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            if (str_starts_with(trim($line), '#')) {
+                continue;
+            }
+            if (str_contains($line, '=')) {
+                [$key, $value] = explode('=', $line, 2);
+                $key = trim($key);
+                $value = trim($value);
+                if (getenv($key) === false) {
+                    putenv("{$key}={$value}");
+                }
+            }
+        }
     }
 
     /**
