@@ -68,10 +68,9 @@ class Nginx
     }
 
     /**
-     * Appends the banned-ips.conf include to the Forge site.conf.
-     * Returns true if appended, false if already present, file missing, or no forge conf.
+     * Checks if the banned-ips include directive is present in a site's Forge config.
      */
-    public function injectBannedIpsInclude(SiteInfo $site): bool
+    public function hasBannedIpsInclude(SiteInfo $site): bool
     {
         if ($site->forgeSiteConf === null || !file_exists($site->forgeSiteConf)) {
             return false;
@@ -80,11 +79,26 @@ class Nginx
         $content = file_get_contents($site->forgeSiteConf);
         $includeDirective = 'include ' . $this->config->nginxDenyFile . ';';
 
-        if (str_contains($content, $includeDirective)) {
+        return str_contains($content, $includeDirective);
+    }
+
+    /**
+     * Appends the banned-ips.conf include to the Forge site.conf.
+     * Returns true if appended, false if already present, file missing, or no forge conf.
+     */
+    public function injectBannedIpsInclude(SiteInfo $site): bool
+    {
+        if ($this->hasBannedIpsInclude($site)) {
             return false;
         }
 
+        if ($site->forgeSiteConf === null || !file_exists($site->forgeSiteConf)) {
+            return false;
+        }
+
+        $content = file_get_contents($site->forgeSiteConf);
         $comment = '# Frame Firewall banned IPs';
+        $includeDirective = 'include ' . $this->config->nginxDenyFile . ';';
         file_put_contents($site->forgeSiteConf, rtrim($content) . "\n" . $comment . "\n" . $includeDirective . "\n");
         return true;
     }

@@ -46,7 +46,7 @@ class HealthCommand extends Command
         $this->checkFail2ban($fail2ban);
         $this->checkCloudflareConfig($config);
         $this->checkBannedIpsFile($config);
-        $this->checkSites($config, $fail2ban);
+        $this->checkSites($config, $fail2ban, $nginx);
 
         return $this->showSummary();
     }
@@ -100,7 +100,7 @@ class HealthCommand extends Command
         );
     }
 
-    private function checkSites(FirewallConfig $config, Fail2Ban $fail2ban): void
+    private function checkSites(FirewallConfig $config, Fail2Ban $fail2ban, Nginx $nginx): void
     {
         $this->io->section('Per-Site Checks');
         $discovery = new SiteDiscovery($config);
@@ -112,11 +112,11 @@ class HealthCommand extends Command
         }
 
         foreach ($sites as $site) {
-            $this->checkSite($site, $config, $fail2ban);
+            $this->checkSite($site, $config, $fail2ban, $nginx);
         }
     }
 
-    private function checkSite(SiteInfo $site, FirewallConfig $config, Fail2Ban $fail2ban): void
+    private function checkSite(SiteInfo $site, FirewallConfig $config, Fail2Ban $fail2ban, Nginx $nginx): void
     {
         $jail = 'forge-' . $site->shortName;
         $this->io->newLine();
@@ -156,9 +156,7 @@ class HealthCommand extends Command
 
         // Banned-ips include in Forge site.conf
         if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
-            $content = file_get_contents($site->forgeSiteConf);
-            $includeDirective = 'include ' . $config->nginxDenyFile . ';';
-            if (str_contains($content, $includeDirective)) {
+            if ($nginx->hasBannedIpsInclude($site)) {
                 $this->check(true, "Banned-ips include present in {$site->forgeSiteConf}");
             } else {
                 $this->warn("Banned-ips include missing from {$site->forgeSiteConf}");

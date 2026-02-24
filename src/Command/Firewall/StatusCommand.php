@@ -80,22 +80,7 @@ class StatusCommand extends Command
     private function showBannedIps(Nginx $nginx, FirewallConfig $config): void
     {
         $this->io->section('Banned IPs');
-        if (!file_exists($config->nginxDenyFile)) {
-            $this->io->warning("Banned IPs file not found: {$config->nginxDenyFile}");
-            return;
-        }
-
-        $bans = $nginx->getAllBans();
-        $banCount = count($bans);
-        $this->io->text("  File: {$config->nginxDenyFile} (exists, {$banCount} active bans)");
-
-        foreach ($bans as $ip => $comment) {
-            $line = "deny {$ip};";
-            if ($comment !== '') {
-                $line .= " # {$comment}";
-            }
-            $this->io->text("    {$line}");
-        }
+        $this->renderBanList($nginx, $config);
     }
 
     private function showFail2banService(Fail2Ban $fail2ban): void
@@ -159,7 +144,7 @@ class StatusCommand extends Command
         $this->showSiteInfo($site);
         $this->showAccessLog($site);
         $this->showFail2banProtection($site);
-        $this->showNginxInclude($site, $config);
+        $this->showNginxInclude($site, $nginx);
         $this->showJailDetail($site, $fail2ban);
         $this->showGlobalNginxBans($nginx, $config);
 
@@ -198,13 +183,11 @@ class StatusCommand extends Command
         }
     }
 
-    private function showNginxInclude(SiteInfo $site, FirewallConfig $config): void
+    private function showNginxInclude(SiteInfo $site, Nginx $nginx): void
     {
         $this->io->section('Nginx Banned IPs Include');
         if ($site->forgeSiteConf !== null && file_exists($site->forgeSiteConf)) {
-            $nginxContent = file_get_contents($site->forgeSiteConf);
-            $includeDirective = 'include ' . $config->nginxDenyFile . ';';
-            if (str_contains($nginxContent, $includeDirective)) {
+            if ($nginx->hasBannedIpsInclude($site)) {
                 $this->io->text("  <fg=green>Present</> - banned IPs include found in {$site->forgeSiteConf}");
             } else {
                 $this->io->text("  <fg=yellow>Missing</> - banned IPs include not found in {$site->forgeSiteConf}");
@@ -244,8 +227,13 @@ class StatusCommand extends Command
     private function showGlobalNginxBans(Nginx $nginx, FirewallConfig $config): void
     {
         $this->io->section('Global Nginx Bans (all sites)');
+        $this->renderBanList($nginx, $config);
+    }
+
+    private function renderBanList(Nginx $nginx, FirewallConfig $config): void
+    {
         if (!file_exists($config->nginxDenyFile)) {
-            $this->io->text("  Banned IPs file not found: {$config->nginxDenyFile}");
+            $this->io->warning("Banned IPs file not found: {$config->nginxDenyFile}");
             return;
         }
 
