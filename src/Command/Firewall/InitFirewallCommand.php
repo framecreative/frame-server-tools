@@ -93,6 +93,19 @@ class InitFirewallCommand extends Command
         $this->io->section('Setting up nginx ban layer');
 
         if (!$skipCloudflare) {
+            $confDir = dirname($this->config->cloudflareRealipConf);
+            $legacyConf = $confDir . '/cloudflare.conf';
+            $hiddenConf = $confDir . '/.cloudflare.conf';
+
+            if (file_exists($legacyConf)) {
+                if ($this->dryRun) {
+                    $this->io->text("Would rename {$legacyConf} to {$hiddenConf}");
+                } else {
+                    rename($legacyConf, $hiddenConf);
+                    $this->io->text("  > Renamed {$legacyConf} to {$hiddenConf}");
+                }
+            }
+
             $this->io->text('Fetching current Cloudflare IP ranges...');
             $cfContent = $this->nginx->createCloudflareRealipConfig();
             if ($this->dryRun) {
